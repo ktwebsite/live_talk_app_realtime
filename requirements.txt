@@ -1,0 +1,9 @@
+Flask
+Flask-Cors
+flask-sock
+google-cloud-storage
+google-generativeai
+python-dotenv
+websockets
+asyncio
+gunicorn
