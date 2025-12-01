@@ -1,152 +1,17 @@
-<!-- <!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <title>AI Sales Trainer</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <style>
-        .mic-active { animation: pulse 1.5s infinite; background-color: #dc3545 !important; }
-        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(220, 53, 69, 0); } 100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); } }
-    </style>
-</head>
-<body class="bg-light">
-
-<div class="container py-5">
-    <h1 class="mb-4 text-center">🎤 営業ロープレ AIコーチ</h1>
-    
-    <div class="row justify-content-center">
-        <div class="col-md-8">
-            <div class="card shadow-sm mb-4">
-                <div class="card-body text-center">
-                    <h5 class="card-title">セールストークを録音</h5>
-                    <button id="recordBtn" class="btn btn-primary btn-lg rounded-pill px-5">
-                        録音開始
-                    </button>
-                    <p id="status" class="mt-3 text-muted">待機中...</p>
-                </div>
-            </div>
-
-            <div class="card shadow-sm mb-4">
-                <div class="card-header">リアルタイム接続ログ (/ws/realtime)</div>
-                <div class="card-body bg-dark text-white" style="height: 150px; overflow-y: auto;" id="wsLog">
-                </div>
-            </div>
-
-            <div class="card shadow-sm">
-                <div class="card-header bg-success text-white">AI フィードバック</div>
-                <div class="card-body">
-                    <div id="feedbackContent">録音完了後にここに評価が表示されます。</div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<script>
-    let mediaRecorder;
-    let audioChunks = [];
-    let isRecording = false;
-    const recordBtn = document.getElementById('recordBtn');
-    const status = document.getElementById('status');
-    const wsLog = document.getElementById('wsLog');
-    
-    // WebSocket接続
-    const socket = new WebSocket(`ws://${location.host}/ws/realtime`);
-    socket.onopen = () => log("WebSocket Connected");
-    socket.onmessage = (e) => log("AI: " + e.data);
-
-    function log(msg) {
-        const div = document.createElement('div');
-        div.textContent = `> ${msg}`;
-        wsLog.appendChild(div);
-        wsLog.scrollTop = wsLog.scrollHeight;
-    }
-
-    recordBtn.addEventListener('click', async () => {
-        if (!isRecording) {
-            // 録音開始
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            mediaRecorder = new MediaRecorder(stream);
-            audioChunks = [];
-
-            mediaRecorder.ondataavailable = event => {
-                audioChunks.push(event.data);
-                // WebSocketへもデータ送信（デモ用）
-                if(socket.readyState === WebSocket.OPEN) socket.send("Audio Chunk Sent");
-            };
-
-            mediaRecorder.onstop = async () => {
-                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                status.textContent = "アップロード中...";
-                await handleUploadAndFeedback(audioBlob);
-            };
-
-            mediaRecorder.start(1000); // 1秒ごとにチャンク作成
-            isRecording = true;
-            recordBtn.textContent = "録音停止";
-            recordBtn.classList.add('mic-active');
-            status.textContent = "録音中...";
-        } else {
-            // 録音停止
-            mediaRecorder.stop();
-            isRecording = false;
-            recordBtn.textContent = "録音開始";
-            recordBtn.classList.remove('mic-active');
-        }
-    });
-
-    async function handleUploadAndFeedback(blob) {
-        try {
-            // 1. 署名付きURL取得
-            const signRes = await fetch('/sign-upload', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({filename: 'practice.webm', contentType: 'audio/webm'})
-            });
-            const signData = await signRes.json();
-
-            // 2. GCSへ直接アップロード
-            await fetch(signData.upload_url, {
-                method: 'PUT',
-                headers: {'Content-Type': 'audio/webm'},
-                body: blob
-            });
-            status.textContent = "AI評価中...";
-
-            // 3. 評価リクエスト
-            const feedRes = await fetch('/feedback', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({gcs_uri: signData.gcs_uri})
-            });
-            const feedData = await feedRes.json();
-
-            // 4. 結果表示
-            document.getElementById('feedbackContent').innerHTML = marked.parse(feedData.feedback || "エラーが発生しました");
-            status.textContent = "完了";
-        } catch (e) {
-            console.error(e);
-            status.textContent = "エラー: " + e.message;
-        }
-    }
-</script>
-</body>
-</html> -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>AI営業ロープレ Live</title>
+    <title>AI営業ロープレ Live (Stable)</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
-        .talking { box-shadow: 0 0 15px #0d6efd; border-color: #0d6efd; }
-        .listening { box-shadow: 0 0 15px #198754; border-color: #198754; animation: pulse 1s infinite; }
-        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); } }
-        #chat-area { height: 300px; overflow-y: auto; background: #f8f9fa; border: 1px solid #ddd; padding: 15px; border-radius: 5px; }
-        .msg-user { text-align: right; color: #0d6efd; margin: 5px; }
+        .listening { animation: pulse 1.5s infinite; border: 2px solid #198754; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(25, 135, 84, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(25, 135, 84, 0); } 100% { box-shadow: 0 0 0 0 rgba(25, 135, 84, 0); } }
+        #chat-area { height: 400px; overflow-y: auto; background: #f8f9fa; border: 1px solid #ddd; padding: 15px; border-radius: 5px; }
+        .msg-user { text-align: right; color: #0d6efd; margin: 5px; font-weight: bold; }
         .msg-ai { text-align: left; color: #198754; margin: 5px; font-weight: bold; }
+        .msg-system { text-align: center; color: #999; font-size: 0.8rem; margin: 10px 0; }
     </style>
 </head>
 <body class="bg-light">
@@ -158,14 +23,14 @@
         <div class="col-md-8">
             <div class="card shadow-sm mb-4">
                 <div class="card-body text-center">
-                    <p class="text-muted">マイクをONにして、「こんにちは」と話しかけてください。</p>
+                    <p class="text-muted">マイクをONにして話しかけてください</p>
                     <button id="connectBtn" class="btn btn-primary btn-lg rounded-pill px-5">
                         商談開始（接続）
                     </button>
                     <button id="disconnectBtn" class="btn btn-danger btn-lg rounded-pill px-5 d-none">
                         商談終了
                     </button>
-                    <div id="status" class="mt-3 badge bg-secondary">切断中</div>
+                    <div id="status" class="mt-3 badge bg-secondary">待機中</div>
                 </div>
             </div>
 
@@ -189,27 +54,42 @@
     let audioContext;
     let processor;
     let inputSource;
-    let audioQueue = [];
-    let isPlaying = false;
-    let conversationLog = []; // 評価用にログを貯める
+    let conversationLog = []; 
+    let recognition; // 音声認識用
 
     const connectBtn = document.getElementById('connectBtn');
     const disconnectBtn = document.getElementById('disconnectBtn');
     const status = document.getElementById('status');
     const chatArea = document.getElementById('chat-area');
 
-    // ■ 音声処理: Base64変換
+    // ▼▼▼ 音声認識 (ユーザーの言葉を文字にする) ▼▼▼
+    function setupSpeechRecognition() {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) return null;
+        
+        const rec = new SpeechRecognition();
+        rec.lang = 'ja-JP';
+        rec.continuous = true;
+        rec.interimResults = false;
+
+        rec.onresult = (event) => {
+            const last = event.results.length - 1;
+            const text = event.results[last][0].transcript;
+            if (text.trim() !== "") {
+                addLog("User", text);
+            }
+        };
+        return rec;
+    }
+
+    // ▼▼▼ 音声処理用関数 ▼▼▼
     function arrayBufferToBase64(buffer) {
         let binary = '';
         const bytes = new Uint8Array(buffer);
-        const len = bytes.byteLength;
-        for (let i = 0; i < len; i++) {
-            binary += String.fromCharCode(bytes[i]);
-        }
+        for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
         return window.btoa(binary);
     }
 
-    // ■ 音声処理: PCM16変換 (Gemini用)
     function floatTo16BitPCM(input) {
         const output = new Int16Array(input.length);
         for (let i = 0; i < input.length; i++) {
@@ -224,151 +104,172 @@
         try {
             status.textContent = "接続中...";
             
-            // 1. WebSocket接続
+            // 1. AudioContext (再利用)
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+            } else if (audioContext.state === 'suspended') {
+                await audioContext.resume();
+            }
+
+            // 2. WebSocket接続
             const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
             socket = new WebSocket(`${protocol}//${location.host}/ws/realtime`);
 
             socket.onopen = async () => {
-                status.textContent = "通話中 (Listening...)";
+                status.textContent = "通話中";
                 status.className = "mt-3 badge bg-success listening";
                 connectBtn.classList.add('d-none');
                 disconnectBtn.classList.remove('d-none');
                 
-                // マイク開始
+                // マイク開始 (Geminiへ送信)
                 await startMicrophone();
+
+                // 音声認識開始 (画面表示)
+                recognition = setupSpeechRecognition();
+                if(recognition) recognition.start();
             };
 
+            // 3. 受信処理 (Blob対応 & 空データ対策)
             socket.onmessage = async (event) => {
-                const response = JSON.parse(event.data);
-                
-                // AIの音声受信 (serverContent -> modelTurn -> parts -> inlineData)
-                if (response.serverContent?.modelTurn?.parts) {
-                    for (const part of response.serverContent.modelTurn.parts) {
-                        if (part.inlineData && part.inlineData.mimeType.startsWith('audio')) {
-                            // 音声データの再生
-                            const audioData = atob(part.inlineData.data);
-                            const arrayBuffer = new Uint8Array(audioData.length);
-                            for(let i=0; i<audioData.length; i++) arrayBuffer[i] = audioData.charCodeAt(i);
-                            playAudio(arrayBuffer.buffer);
-                        }
-                        // テキストがあればログに追加
-                        if (part.text) {
-                            addLog("AI", part.text);
+                try {
+                    let textData;
+                    if (event.data instanceof Blob) {
+                        textData = await event.data.text();
+                    } else {
+                        textData = event.data;
+                    }
+                    
+                    const response = JSON.parse(textData);
+                    
+                    if (response.serverContent?.modelTurn?.parts) {
+                        for (const part of response.serverContent.modelTurn.parts) {
+                            // 音声データがあれば再生
+                            if (part.inlineData && part.inlineData.mimeType.startsWith('audio')) {
+                                const audioStr = atob(part.inlineData.data);
+                                playAudio(audioStr);
+                            }
+                            // テキストがあれば表示 (現在は設定により来ないが、念のため)
+                            if (part.text) {
+                                addLog("AI", part.text);
+                            }
                         }
                     }
+                } catch (e) {
+                    console.error("受信エラー:", e);
                 }
             };
 
-            socket.onclose = () => {
-                stopMicrophone();
-                status.textContent = "終了";
-                status.className = "mt-3 badge bg-secondary";
+            socket.onclose = () => stopAll();
+            socket.onerror = (e) => {
+                console.error(e);
+                alert("接続エラー。リロードして再試行してください。");
+                stopAll();
             };
 
         } catch (e) {
             console.error(e);
-            alert("接続エラー: " + e.message);
+            alert("エラー: " + e.message);
         }
     });
 
-    // ■ 切断＆評価リクエスト
+    // ■ 切断＆評価
     disconnectBtn.addEventListener('click', async () => {
-        socket.close();
-        stopMicrophone();
-        connectBtn.classList.remove('d-none');
-        disconnectBtn.classList.add('d-none');
+        stopAll();
         
-        // 評価APIを呼ぶ
-        status.textContent = "AI評価中...";
+        status.textContent = "評価作成中...";
+        status.className = "mt-3 badge bg-warning text-dark";
+        
+        // ログを整形して送信
         const logText = conversationLog.map(l => `${l.role}: ${l.text}`).join("\n");
         
         try {
             const res = await fetch('/feedback', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ log: logText || "（音声対話のため詳細ログなし。雰囲気で評価してください）" })
+                body: JSON.stringify({ log: logText || "（音声のみの対話でした）" })
             });
             const data = await res.json();
             document.getElementById('feedbackContent').innerHTML = marked.parse(data.feedback);
             status.textContent = "完了";
+            status.className = "mt-3 badge bg-secondary";
         } catch(e) {
             status.textContent = "評価エラー";
         }
     });
 
-    // ■ マイク入力処理
+    function stopAll() {
+        if(socket) socket.close();
+        stopMicrophone();
+        if(recognition) recognition.stop();
+        
+        connectBtn.classList.remove('d-none');
+        disconnectBtn.classList.add('d-none');
+        status.textContent = "待機中";
+        status.className = "mt-3 badge bg-secondary";
+    }
+
+    // ■ マイク入力
     async function startMicrophone() {
-        audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
         const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, sampleRate: 24000 } });
         inputSource = audioContext.createMediaStreamSource(stream);
-        
-        // AudioWorkletが理想ですが、簡略化のためScriptProcessorを使用
         processor = audioContext.createScriptProcessor(4096, 1, 1);
         
         inputSource.connect(processor);
         processor.connect(audioContext.destination);
 
         processor.onaudioprocess = (e) => {
-            if (socket.readyState !== WebSocket.OPEN) return;
+            if (!socket || socket.readyState !== WebSocket.OPEN) return;
             
             const inputData = e.inputBuffer.getChannelData(0);
-            // PCM16変換
             const pcmData = floatTo16BitPCM(inputData);
-            // Base64変換
             const base64Audio = arrayBufferToBase64(pcmData);
 
-            // Geminiへの送信メッセージ形式
-            const msg = {
+            socket.send(JSON.stringify({
                 realtime_input: {
                     media_chunks: [{
                         mime_type: "audio/pcm",
                         data: base64Audio
                     }]
                 }
-            };
-            socket.send(JSON.stringify(msg));
+            }));
         };
     }
 
     function stopMicrophone() {
         if (inputSource) inputSource.disconnect();
         if (processor) processor.disconnect();
-        if (audioContext) audioContext.close();
     }
 
-    // ■ AI音声の再生
-    async function playAudio(arrayBuffer) {
-        // PCM 24kHz (Geminiの出力仕様) を再生
-        // 簡易実装: 音声キューに追加して順次再生
-        // 注: 本格的にはAudioWorkletでのストリーム再生が必要
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
-        // PCMデータをAudioBufferに変換
-        const pcm16 = new Int16Array(arrayBuffer);
+    // ■ 音声再生 (安全性強化版)
+    async function playAudio(base64String) {
+        if (!base64String || base64String.length === 0) return;
+
+        const audioData = new Uint8Array(base64String.length);
+        for(let i=0; i<base64String.length; i++) audioData[i] = base64String.charCodeAt(i);
+        
+        if (!audioContext) return;
+
+        const pcm16 = new Int16Array(audioData.buffer);
+        if (pcm16.length === 0) return;
+
         const float32 = new Float32Array(pcm16.length);
         for(let i=0; i<pcm16.length; i++) float32[i] = pcm16[i] / 32768;
 
-        const buffer = audioCtx.createBuffer(1, float32.length, 24000);
+        const buffer = audioContext.createBuffer(1, float32.length, 24000);
         buffer.getChannelData(0).set(float32);
 
-        const source = audioCtx.createBufferSource();
+        const source = audioContext.createBufferSource();
         source.buffer = buffer;
-        source.connect(audioCtx.destination);
+        source.connect(audioContext.destination);
         source.start();
-        
-        // 簡易ログ表示（音声が来たことだけ表示）
-        addLog("AI", "（音声発話中...）");
     }
 
     function addLog(role, text) {
-        // 重複排除（簡易）
-        if(conversationLog.length > 0 && conversationLog[conversationLog.length-1].text === text) return;
-
         const div = document.createElement('div');
         div.className = role === "User" ? "msg-user" : "msg-ai";
-        div.textContent = `${role}: ${text}`;
+        div.textContent = text;
         chatArea.appendChild(div);
         chatArea.scrollTop = chatArea.scrollHeight;
-        
         conversationLog.push({role, text});
     }
 </script>

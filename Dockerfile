@@ -1,21 +1,20 @@
-# ベースイメージ
 FROM python:3.10-slim
 
-# 作業ディレクトリ
 WORKDIR /app
 
-# 依存関係インストール
+# ライブラリのインストール
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# アプリケーションコードのコピー
+# コードのコピー
 COPY . .
 
-# 環境変数（デフォルト値、実行時に上書き推奨）
+# 環境変数の準備
 ENV FLASK_APP=app.py
+ENV PYTHONUNBUFFERED=1
 
-# ポート公開
+# ポート5000を開放
 EXPOSE 5000
 
-# 実行コマンド
+# 起動コマンド
 CMD ["python", "app.py"]

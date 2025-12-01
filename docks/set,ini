@@ -1,0 +1,18 @@
+🎤 ユーザー（営業担当）
+      ↓（マイク音声）
+[ブラウザUI]
+ ├─ HTML + JS（WebSocket通信・録音）
+ ├─ Gemini Realtime API（AI音声対話）
+ ├─ GCSに録音保存
+ └─ Gemini GenerateContent APIで評価
+      ↓（API通信）
+[Flaskサーバ（Docker内）]
+ ├─ /ws/realtime  → Realtime API プロキシ（AI音声対話中継）
+ ├─ /sign-upload  → GCS署名付きURL発行
+ ├─ /feedback     → 営業評価リクエスト
+ └─ /get-key      → 一時APIキー返却（安全対策用）
+      ↓
+[Google Cloud]
+ ├─ Gemini Realtime API  → 音声リアル対話
+ ├─ Gemini GenerateContent API → 営業評価
+ └─ Cloud Storage (GCS) → 録音保存
