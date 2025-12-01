@@ -8,6 +8,7 @@ from flask_sock import Sock
 from flask_cors import CORS
 import google.generativeai as genai
 import datetime
+from google.cloud import storage
 
 # 設定
 app = Flask(__name__)
@@ -19,6 +20,8 @@ logging.basicConfig(level=logging.INFO)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 # リアルタイム対話用モデル (実験版)
 MODEL_NAME = "models/gemini-2.0-flash-exp"
+# 環境変数からバケット名を取得（ファイルの冒頭付近）
+BUCKET_NAME = os.getenv("GCS_BUCKET_NAME")
 
 @app.route('/')
 def index():
@@ -114,18 +117,22 @@ def feedback():
         data = request.json
         conversation_log = data.get('log', '')
 
-        # ★追加: ログをファイルに保存
-        if conversation_log:
-            timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-            os.makedirs("logs", exist_ok=True) # フォルダがなければ作成
-            log_path = f"logs/log_{timestamp}.txt"
-            with open(log_path, "w", encoding="utf-8") as f:
-                f.write(conversation_log)
-            logging.info(f"Log saved to {log_path}")
-
         if not conversation_log:
-            return jsonify({"feedback": "会話ログがありませんでした。"}), 400
+            return jsonify({"feedback": "会話ログがありません。"}), 400
 
+        # ★ GCSに保存する処理
+        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"logs/log_users/log_user_{timestamp}.txt" # GCS上のパス
+
+        # GCSクライアント初期化 (環境変数の認証情報を使用)
+        storage_client = storage.Client()
+        bucket = storage_client.bucket(BUCKET_NAME)
+        blob = bucket.blob(filename)
+
+        # テキストデータを直接アップロード
+        blob.upload_from_string(conversation_log, content_type='text/plain')
+        
+        logging.info(f"Log uploaded to gs://{BUCKET_NAME}/{filename}")
         # 評価用モデル (1.5 Flash - 安定版)
         genai.configure(api_key=GEMINI_API_KEY)
         # ユーザー環境に合わせてモデル名を指定

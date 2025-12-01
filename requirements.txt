@@ -6,3 +6,4 @@ python-dotenv
 websockets
 asyncio
 gunicorn
+google-cloud-storage
