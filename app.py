@@ -69,37 +69,56 @@ def realtime_proxy(ws_client):
 # ---------------------------------------------------------
 @app.route('/feedback', methods=['POST'])
 def feedback():
+    audio_path = "temp_ai_response.wav"
+    uploaded_audio = None
+    response = None 
+    
     try:
         # FormDataから取得
         conversation_log = request.form.get('log', '')
         audio_file = request.files.get('audio')
 
         # 音声を一時保存
-        audio_path = "temp_ai_response.wav"
         if audio_file:
             audio_file.save(audio_path)
             logging.info("Audio file received.")
 
-        if conversation_log and GCS_BUCKET_NAME:
+        # タイムスタンプを生成
+        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        
+        storage_client = None
+        bucket = None
+        
+        # GCSクライアントとバケットを一度だけ初期化
+        if GCS_BUCKET_NAME:
             try:
-                timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-                log_filename = f"logs/log_users/log_{timestamp}.txt"
-                
                 storage_client = storage.Client()
                 bucket = storage_client.bucket(GCS_BUCKET_NAME)
-                blob = bucket.blob(log_filename)
+            except Exception as e:
+                logging.error(f"Failed to initialize GCS Client: {e}. GCS uploads will be skipped.")
+        
+        # 1. 会話ログのGCSアップロード
+        if conversation_log and bucket:
+            try:
+                log_filename = f"logs/log_users/log_{timestamp}.txt"
                 
-                blob.upload_from_string(conversation_log, content_type='text/plain')
+                # ★修正: UTF-8バイト列にし、charset=utf-8 を指定してアップロード
+                blob = bucket.blob(log_filename)
+                blob.upload_from_string(
+                    conversation_log.encode('utf-8'), 
+                    content_type='text/plain; charset=utf-8'
+                )
+                
                 logging.info(f"Conversation log uploaded to gs://{GCS_BUCKET_NAME}/{log_filename}")
             except Exception as e:
                 logging.error(f"Failed to upload log to GCS: {e}")
+
 
         # Gemini 1.5 Flash (マルチモーダル対応)
         genai.configure(api_key=GEMINI_API_KEY)
         model = genai.GenerativeModel('gemini-flash-latest')
 
         # 音声ファイルをアップロード
-        uploaded_audio = None
         if os.path.exists(audio_path):
            uploaded_audio = genai.upload_file(audio_path, mime_type="audio/wav")
 
@@ -134,15 +153,41 @@ def feedback():
 
         response = model.generate_content(contents)
         
+        # 2. フィードバックの結果をGCSに保存
+        if response and bucket: 
+            try:
+                feedback_filename = f"feedback/feedback_{timestamp}.md"
+                
+                # ★修正: UTF-8バイト列にし、charset=utf-8 を指定してアップロード
+                blob = bucket.blob(feedback_filename)
+                blob.upload_from_string(
+                    response.text.encode('utf-8'), 
+                    content_type='text/markdown; charset=utf-8'
+                )
+                
+                logging.info(f"Feedback uploaded to gs://{GCS_BUCKET_NAME}/{feedback_filename}")
+            except Exception as e:
+                logging.error(f"Failed to upload feedback to GCS: {e}")
+
         # 後始末
+        if uploaded_audio:
+            try:
+                genai.delete_file(uploaded_audio.name)
+            except:
+                pass
         if os.path.exists(audio_path):
             os.remove(audio_path)
-
-        return jsonify({"feedback": response.text})
+            
+        # responseが取得できていればそれを返す
+        if response:
+            return jsonify({"feedback": response.text})
+        else:
+             return jsonify({"error": "Gemini API failed to generate content."}), 500
 
     except Exception as e:
         logging.error(f"Feedback Error: {e}")
+        if os.path.exists(audio_path):
+            os.remove(audio_path)
         return jsonify({"error": str(e)}), 500
-
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
