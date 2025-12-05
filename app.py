@@ -188,6 +188,6 @@ def feedback():
         logging.error(f"Feedback Error: {e}")
         if os.path.exists(audio_path):
             os.remove(audio_path)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": str(e)}), 500#ihiarhuiauhriahufiaeuf
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
