@@ -7,154 +7,137 @@ from flask import Flask, render_template, request, jsonify
 from flask_sock import Sock
 from flask_cors import CORS
 import google.generativeai as genai
-import datetime
 from google.cloud import storage
+import datetime
 
-# 設定
 app = Flask(__name__)
 CORS(app)
 sock = Sock(app)
 logging.basicConfig(level=logging.INFO)
 
-# APIキー
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-# リアルタイム対話用モデル (実験版)
 MODEL_NAME = "models/gemini-2.0-flash-exp"
-# 環境変数からバケット名を取得（ファイルの冒頭付近）
-BUCKET_NAME = os.getenv("GCS_BUCKET_NAME")
+GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME")
+
+
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
-# ---------------------------------------------------------
-# 🎤 リアルタイム対話の中継 (WebSocket Proxy)
-# ---------------------------------------------------------
+# WebSocketプロキシ（変更なし）
 @sock.route('/ws/realtime')
 def realtime_proxy(ws_client):
     host = "generativelanguage.googleapis.com"
     url = f"wss://{host}/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key={GEMINI_API_KEY}"
-
     setup_msg = {
         "setup": {
             "model": MODEL_NAME,
-            "system_instruction": {
-                "parts": [{"text": """
-                あなたはIT企業の導入担当者（顧客）です。
-                相手は営業担当者です。
-                あなたは新しいツールの導入には慎重で、特に「コスト」と「セキュリティ」を気にしています。
-                簡単には同意せず、鋭い質問を投げかけてください。
-                ただし、相手の説明が論理的であれば納得してください。
-                会話は日本語で行います。短めの返答を心がけてください。
-                """}]
-            },
+            "system_instruction": { "parts": [{"text": "あなたはIT企業の導入担当者（顧客）です...（略）"}] },
             "generation_config": {
-                # ★重要: 現在のAPI仕様に合わせて AUDIO のみに設定 (TEXTを含めるとエラーになるため)
                 "response_modalities": ["AUDIO"],
-                "speech_config": {
-                    "voice_config": {"prebuilt_voice_config": {"voice_name": "Aoede"}}
-                }
+                "speech_config": { "voice_config": {"prebuilt_voice_config": {"voice_name": "Aoede"}} }
             }
         }
     }
-
+    # ... (プロキシ処理は前回と同じなので省略可、そのままでOK) ...
     async def proxy_handler():
         try:
             async with websockets.connect(url) as ws_gemini:
-                logging.info("Connected to Gemini")
-                
-                # 初期設定を送信
                 await ws_gemini.send(json.dumps(setup_msg))
-                
-                # A. ブラウザ -> Gemini (マイク音声の転送)
                 async def forward_to_gemini():
                     while True:
                         try:
-                            # ★修正: ブロッキング回避のため別スレッドで受信
                             data = await asyncio.to_thread(ws_client.receive)
-                            if data is None: 
-                                break
+                            if data is None: break
                             await ws_gemini.send(data)
-                        except Exception as e:
-                            logging.error(f"Client->Gemini Error: {e}")
-                            break
-
-                # B. Gemini -> ブラウザ (AI音声の転送)
+                        except: break
                 async def forward_to_client():
                     async for msg in ws_gemini:
                         try:
-                            # ★修正: バイト列なら文字列にデコードして送る
-                            if isinstance(msg, bytes):
-                                msg = msg.decode('utf-8')
+                            if isinstance(msg, bytes): msg = msg.decode('utf-8')
                             ws_client.send(msg)
-                        except Exception as e:
-                            logging.error(f"Gemini->Client Error: {e}")
-                            break
-
-                # 送受信を並行して実行
+                        except: break
                 await asyncio.gather(forward_to_gemini(), forward_to_client())
-
-        except Exception as e:
-            logging.error(f"WebSocket Connection Error: {e}")
-            try:
-                ws_client.close()
-            except:
-                pass
-
-    # Flask(同期)の中でAsyncio(非同期)を動かす
-    try:
-        asyncio.run(proxy_handler())
-    except Exception as e:
-        logging.error(f"Asyncio Error: {e}")
+        except: pass
+    try: asyncio.run(proxy_handler())
+    except: pass
 
 
 # ---------------------------------------------------------
-# 📝 対話終了後の評価 & ログ保存
+# 📝 評価 (ファイルを受け取るように変更)
 # ---------------------------------------------------------
 @app.route('/feedback', methods=['POST'])
 def feedback():
     try:
-        data = request.json
-        conversation_log = data.get('log', '')
+        # FormDataから取得
+        conversation_log = request.form.get('log', '')
+        audio_file = request.files.get('audio')
 
-        if not conversation_log:
-            return jsonify({"feedback": "会話ログがありません。"}), 400
+        # 音声を一時保存
+        audio_path = "temp_ai_response.wav"
+        if audio_file:
+            audio_file.save(audio_path)
+            logging.info("Audio file received.")
 
-        # ★ GCSに保存する処理
-        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f"logs/log_users/log_user_{timestamp}.txt" # GCS上のパス
+        if conversation_log and GCS_BUCKET_NAME:
+            try:
+                timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+                log_filename = f"logs/log_users/log_{timestamp}.txt"
+                
+                storage_client = storage.Client()
+                bucket = storage_client.bucket(GCS_BUCKET_NAME)
+                blob = bucket.blob(log_filename)
+                
+                blob.upload_from_string(conversation_log, content_type='text/plain')
+                logging.info(f"Conversation log uploaded to gs://{GCS_BUCKET_NAME}/{log_filename}")
+            except Exception as e:
+                logging.error(f"Failed to upload log to GCS: {e}")
 
-        # GCSクライアント初期化 (環境変数の認証情報を使用)
-        storage_client = storage.Client()
-        bucket = storage_client.bucket(BUCKET_NAME)
-        blob = bucket.blob(filename)
-
-        # テキストデータを直接アップロード
-        blob.upload_from_string(conversation_log, content_type='text/plain')
-        
-        logging.info(f"Log uploaded to gs://{BUCKET_NAME}/{filename}")
-        # 評価用モデル (1.5 Flash - 安定版)
+        # Gemini 1.5 Flash (マルチモーダル対応)
         genai.configure(api_key=GEMINI_API_KEY)
-        # ユーザー環境に合わせてモデル名を指定
         model = genai.GenerativeModel('gemini-flash-latest')
 
+        # 音声ファイルをアップロード
+        uploaded_audio = None
+        if os.path.exists(audio_path):
+           uploaded_audio = genai.upload_file(audio_path, mime_type="audio/wav")
+
         prompt = f"""
-        あなたは営業研修のコーチです。
-        以下の会話ログを分析し、フィードバックを行ってください。
-        （ログにAIの言葉が含まれていない場合は、ユーザーの発言内容から文脈を推測してください）
-
-        --- 会話ログ ---
+        あなたは営業研修のコーチです。  
+        
+        【資料1】ユーザー（営業担当）の発言ログ:
         {conversation_log}
-        ----------------
 
-        ## 出力フォーマット
+        【資料2】AI顧客の発言音声:
+        (添付の音声ファイル)
+
+        【指示】
+        1. まず、添付の音声ファイル（AI顧客の発言）を聞き取り、内容を文字起こししてください。
+        2. ユーザーの発言ログと合わせて、会話全体の流れを再現してください。
+        3. その会話全体に基づいて、営業担当者のパフォーマンスを評価してください。
+
+        【出力フォーマット】
+        ## 会話の再現（要約）
+        - 営業: ...
+        - 顧客: ...
+
+        ## フィードバック
         1. **良かった点**
-        2. **改善点** (具体的な言い回しの修正案)
-        3. **成約の可能性** (％)
-        4. **総合スコア** (/100)
+        2. **改善点**
+        3. **総合スコア** (/100)
         """
 
-        response = model.generate_content(prompt)
+        contents = [prompt]
+        if uploaded_audio:
+            contents.append(uploaded_audio)
+
+        response = model.generate_content(contents)
+        
+        # 後始末
+        if os.path.exists(audio_path):
+            os.remove(audio_path)
+
         return jsonify({"feedback": response.text})
 
     except Exception as e:

@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>AI営業ロープレ Live (Smooth Audio)</title>
+    <title>AI営業ロープレ Live (Rec & Eval)</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
@@ -34,14 +34,14 @@
             </div>
 
             <div class="card shadow-sm mb-4">
-                <div class="card-header">会話ログ</div>
+                <div class="card-header">会話ログ (自分の声)</div>
                 <div id="chat-area"></div>
             </div>
 
             <div class="card shadow-sm">
                 <div class="card-header bg-dark text-white">上司からのフィードバック</div>
                 <div class="card-body">
-                    <div id="feedbackContent">商談終了後に評価が表示されます。</div>
+                    <div id="feedbackContent">商談終了後に、AIの声を分析してここに評価が表示されます。</div>
                 </div>
             </div>
         </div>
@@ -53,66 +53,113 @@
     let audioContext;
     let processor;
     let inputSource;
-    let conversationLog = []; 
+    let conversationLog = []; // 自分の発言ログ
     let recognition;
-    
-    // ★追加: 音声を滑らかにつなぐための予約時間管理
     let nextStartTime = 0;
+    
+    // ★追加: AIの音声を貯めておく配列
+    let aiAudioChunks = []; 
 
     const connectBtn = document.getElementById('connectBtn');
     const disconnectBtn = document.getElementById('disconnectBtn');
     const status = document.getElementById('status');
     const chatArea = document.getElementById('chat-area');
 
-    // ▼ 音声認識 (表示用)
+    // ▼ WAVファイル作成用関数 (PCMデータからWAVヘッダを生成)
+    function exportWAV(pcmData, sampleRate) {
+        const buffer = new ArrayBuffer(44 + pcmData.length * 2);
+        const view = new DataView(buffer);
+
+        // RIFF header
+        writeString(view, 0, 'RIFF');
+        view.setUint32(4, 36 + pcmData.length * 2, true);
+        writeString(view, 8, 'WAVE');
+        writeString(view, 12, 'fmt ');
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true); // PCM
+        view.setUint16(22, 1, true); // Mono
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate * 2, true);
+        view.setUint16(32, 2, true);
+        view.setUint16(34, 16, true);
+        writeString(view, 36, 'data');
+        view.setUint32(40, pcmData.length * 2, true);
+
+        // PCM Data
+        for (let i = 0; i < pcmData.length; i++) {
+            view.setInt16(44 + i * 2, pcmData[i], true);
+        }
+
+        return new Blob([view], { type: 'audio/wav' });
+    }
+
+    function writeString(view, offset, string) {
+        for (let i = 0; i < string.length; i++) {
+            view.setUint8(offset + i, string.charCodeAt(i));
+        }
+    }
+
+    // ▼ 音声認識
+    // ▼▼▼ 音声認識セットアップ (改良版) ▼▼▼
     function setupSpeechRecognition() {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognition) return null;
+        if (!SpeechRecognition) {
+            console.error("音声認識非対応のブラウザです");
+            return null;
+        }
+        
         const rec = new SpeechRecognition();
         rec.lang = 'ja-JP';
-        rec.continuous = true;
-        rec.interimResults = false;
+        rec.continuous = true; // 連続認識モード
+        rec.interimResults = false; // 確定した結果のみ取得
+
+        // 話した言葉をログに追加
         rec.onresult = (event) => {
             const last = event.results.length - 1;
             const text = event.results[last][0].transcript;
-            if (text.trim() !== "") addLog("User", text);
+            console.log("認識結果:", text); // 確認用ログ
+            if (text.trim() !== "") {
+                addLog("User", text);
+            }
         };
+
+        // ★追加: エラーが発生した場合
+        rec.onerror = (event) => {
+            console.error("音声認識エラー:", event.error);
+            if (event.error === 'not-allowed') {
+                alert("マイクの使用が許可されていません。");
+            }
+        };
+
+        // ★追加: 認識が止まったら自動で再開する (重要！)
+        rec.onend = () => {
+            // 商談中（ソケットがつながっている）なら、すぐに再開させる
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                console.log("音声認識が中断されました。再開します...");
+                try {
+                    rec.start();
+                } catch(e) {
+                    console.error("再開エラー:", e);
+                }
+            }
+        };
+
         return rec;
     }
 
-    // ▼ データ変換系
-    function arrayBufferToBase64(buffer) {
-        let binary = '';
-        const bytes = new Uint8Array(buffer);
-        for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
-        return window.btoa(binary);
-    }
-
-    function floatTo16BitPCM(input) {
-        const output = new Int16Array(input.length);
-        for (let i = 0; i < input.length; i++) {
-            const s = Math.max(-1, Math.min(1, input[i]));
-            output[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-        }
-        return output.buffer;
-    }
-
-    // ■ 接続開始
+    // ▼ 接続開始
     connectBtn.addEventListener('click', async () => {
         try {
             status.textContent = "接続中...";
+            aiAudioChunks = []; // リセット
             
-            // AudioContext初期化 (サンプルレート指定はブラウザによって無視されることがあるが指定しておく)
             if (!audioContext) {
                 audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
             } else if (audioContext.state === 'suspended') {
                 await audioContext.resume();
             }
-            
-            // 再生時間をリセット
             nextStartTime = audioContext.currentTime;
 
-            // WebSocket接続
             const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
             socket = new WebSocket(`${protocol}//${location.host}/ws/realtime`);
 
@@ -127,56 +174,58 @@
                 if(recognition) recognition.start();
             };
 
-            // 受信処理
             socket.onmessage = async (event) => {
                 try {
                     let textData;
-                    if (event.data instanceof Blob) {
-                        textData = await event.data.text();
-                    } else {
-                        textData = event.data;
-                    }
-                    const response = JSON.parse(textData);
+                    if (event.data instanceof Blob) textData = await event.data.text();
+                    else textData = event.data;
                     
+                    const response = JSON.parse(textData);
                     if (response.serverContent?.modelTurn?.parts) {
                         for (const part of response.serverContent.modelTurn.parts) {
                             if (part.inlineData && part.inlineData.mimeType.startsWith('audio')) {
+                                // 音声再生＆保存
                                 const audioStr = atob(part.inlineData.data);
-                                playAudio(audioStr);
-                            }
-                            if (part.text) {
-                                addLog("AI", part.text);
+                                playAndRecordAudio(audioStr);
                             }
                         }
                     }
-                } catch (e) {
-                    console.error("受信エラー:", e);
-                }
+                } catch (e) { console.error(e); }
             };
 
             socket.onclose = () => stopAll();
-            socket.onerror = (e) => {
-                alert("接続エラー");
-                stopAll();
-            };
-
-        } catch (e) {
-            alert("エラー: " + e.message);
-        }
+        } catch (e) { alert("Error: " + e.message); }
     });
 
-    // ■ 切断＆評価
+    // ▼ 切断＆評価 (ここが重要！)
     disconnectBtn.addEventListener('click', async () => {
         stopAll();
-        status.textContent = "評価作成中...";
+        status.textContent = "AI音声分析・評価中...";
         status.className = "mt-3 badge bg-warning text-dark";
         
+        // 1. 貯めた音声データを結合
+        const totalLength = aiAudioChunks.reduce((acc, chunk) => acc + chunk.length, 0);
+        const mergedAudio = new Int16Array(totalLength);
+        let offset = 0;
+        for (const chunk of aiAudioChunks) {
+            mergedAudio.set(chunk, offset);
+            offset += chunk.length;
+        }
+
+        // 2. WAVファイル作成
+        const wavBlob = exportWAV(mergedAudio, 24000);
+
+        // 3. フォームデータ作成
+        const formData = new FormData();
         const logText = conversationLog.map(l => `${l.role}: ${l.text}`).join("\n");
+        formData.append('log', logText);
+        formData.append('audio', wavBlob, 'ai_response.wav'); // ファイルとして添付
+
+        // 4. 送信
         try {
             const res = await fetch('/feedback', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ log: logText || "（音声のみの対話でした）" })
+                body: formData // JSONではなくFormDataで送る
             });
             const data = await res.json();
             document.getElementById('feedbackContent').innerHTML = marked.parse(data.feedback);
@@ -184,6 +233,7 @@
             status.className = "mt-3 badge bg-secondary";
         } catch(e) {
             status.textContent = "評価エラー";
+            console.error(e);
         }
     });
 
@@ -197,33 +247,31 @@
         status.className = "mt-3 badge bg-secondary";
     }
 
-    // ■ マイク入力
+    // ▼ マイク入力 (Float32 -> Int16変換)
     async function startMicrophone() {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, sampleRate: 24000 } });
         inputSource = audioContext.createMediaStreamSource(stream);
         processor = audioContext.createScriptProcessor(4096, 1, 1);
-        
         inputSource.connect(processor);
         processor.connect(audioContext.destination);
 
         processor.onaudioprocess = (e) => {
             if (!socket || socket.readyState !== WebSocket.OPEN) return;
             const inputData = e.inputBuffer.getChannelData(0);
+            const output = new Int16Array(inputData.length);
+            for (let i = 0; i < inputData.length; i++) {
+                const s = Math.max(-1, Math.min(1, inputData[i]));
+                output[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+            }
             
-            // ★重要: 単純な間引き（ダウンサンプリング）は音質劣化の原因になるため、
-            // 今回はブラウザのレートのまま送信し、サーバー側(Gemini)の許容範囲に任せる。
-            // (24k指定しても48kになる環境が多いが、Geminiは比較的柔軟に対応する)
-            
-            const pcmData = floatTo16BitPCM(inputData);
-            const base64Audio = arrayBufferToBase64(pcmData);
+            // Base64変換
+            let binary = '';
+            const bytes = new Uint8Array(output.buffer);
+            for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+            const base64Audio = window.btoa(binary);
 
             socket.send(JSON.stringify({
-                realtime_input: {
-                    media_chunks: [{
-                        mime_type: "audio/pcm",
-                        data: base64Audio
-                    }]
-                }
+                realtime_input: { media_chunks: [{ mime_type: "audio/pcm", data: base64Audio }] }
             }));
         };
     }
@@ -233,11 +281,10 @@
         if (processor) processor.disconnect();
     }
 
-    // ■ 音声再生 (キューイング実装版)
-    async function playAudio(base64String) {
-        if (!base64String || base64String.length === 0) return;
+    // ▼ AI音声再生＆保存
+    async function playAndRecordAudio(base64String) {
+        if (!base64String) return;
 
-        // Base64 -> Byte変換
         const audioData = new Uint8Array(base64String.length);
         for(let i=0; i<base64String.length; i++) audioData[i] = base64String.charCodeAt(i);
         
@@ -245,10 +292,13 @@
         const pcm16 = new Int16Array(audioData.buffer);
         if (pcm16.length === 0) return;
 
+        // ★保存: 後で送るために配列に追加
+        aiAudioChunks.push(pcm16);
+
+        // ★再生: AudioContextで流す
         const float32 = new Float32Array(pcm16.length);
         for(let i=0; i<pcm16.length; i++) float32[i] = pcm16[i] / 32768;
 
-        // 24kHzでバッファ作成 (Geminiの出力は通常24kHz)
         const buffer = audioContext.createBuffer(1, float32.length, 24000);
         buffer.getChannelData(0).set(float32);
 
@@ -256,16 +306,8 @@
         source.buffer = buffer;
         source.connect(audioContext.destination);
 
-        // ★★★ ここが修正の肝 ★★★
-        // 次の再生開始時間が、現在時刻より過去になっていたら、現在時刻にリセット
-        // (つまり、遅延してないなら予約時刻に、遅延してたら即再生)
-        if (nextStartTime < audioContext.currentTime) {
-            nextStartTime = audioContext.currentTime;
-        }
-        
+        if (nextStartTime < audioContext.currentTime) nextStartTime = audioContext.currentTime;
         source.start(nextStartTime);
-        
-        // 次の音声の開始時間を更新 (今の音声の長さ分だけ後ろにずらす)
         nextStartTime += buffer.duration;
     }
 
