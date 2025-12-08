@@ -8,8 +8,8 @@ on:
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   REGION: asia-northeast1 # 東京リージョン
-  REPO_NAME: live-talk-repo
-  SERVICE_NAME: live-talk-service
+  REPO_NAME: live-talk
+  SERVICE_NAME: live-talk
 
 jobs:
   deploy:
