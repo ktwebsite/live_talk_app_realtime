@@ -3,7 +3,7 @@ name: Deploy to Cloud Run
 on:
   push:
     branches:
-      - main  # mainブランチへのプッシュで発動
+      - main # mainブランチへのプッシュで発動
 
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
@@ -15,8 +15,8 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     permissions:
-      contents: 'read'
-      id-token: 'write'
+      contents: "read"
+      id-token: "write"
 
     steps:
       - name: Checkout
@@ -42,11 +42,12 @@ jobs:
       # ビルド & プッシュ
       - name: Build and Push Container
         env:
-          # 長いイメージ名をここで定義してスッキリさせる
           IMAGE_TAG: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
         run: |
-          docker build -t $IMAGE_TAG .
-          docker push $IMAGE_TAG
+          echo "Building image: ${IMAGE_TAG}"
+          docker build -t "${IMAGE_TAG}" .
+          docker push "${IMAGE_TAG}"
+
       # Cloud Run へのデプロイ
       - name: Deploy to Cloud Run
         uses: google-github-actions/deploy-cloudrun@v2
@@ -57,4 +58,4 @@ jobs:
           env_vars: |
             GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
             GCS_BUCKET_NAME=${{ secrets.GCS_BUCKET_NAME }}
-          flags: '--port=5000 --allow-unauthenticated'
+          flags: "--port=5000 --allow-unauthenticated"
