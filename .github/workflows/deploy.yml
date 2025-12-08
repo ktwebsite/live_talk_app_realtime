@@ -41,9 +41,12 @@ jobs:
 
       # ビルド & プッシュ
       - name: Build and Push Container
+        env:
+          # 長いイメージ名をここで定義してスッキリさせる
+          IMAGE_TAG: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
         run: |
-          docker build -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.SERVICE_NAME }}:${{ github.sha }} .
-          docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+          docker build -t $IMAGE_TAG .
+          docker push $IMAGE_TAG
       # Cloud Run へのデプロイ
       - name: Deploy to Cloud Run
         uses: google-github-actions/deploy-cloudrun@v2
