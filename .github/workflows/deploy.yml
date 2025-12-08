@@ -8,8 +8,8 @@ on:
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   REGION: asia-northeast1 # 東京リージョン
-  REPO_NAME: live-talk
-  SERVICE_NAME: live-talk
+  REPO_NAME: live-talk # 💡 修正済み: Artifact Registry の実際の名前に合わせました
+  SERVICE_NAME: live-talk # 💡 修正済み: サービス名もリポジトリ名に合わせることで統一性を高めます
 
 jobs:
   deploy:
@@ -41,9 +41,11 @@ jobs:
 
       # ビルド & プッシュ
       - name: Build and Push Container
-        env:
-          IMAGE_TAG: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+        # 変数定義を Run ブロック内に移動する（以前のトラブルシューティングに基づく）
         run: |
+          # IMAGE_TAG を Run ブロック内で定義し、改行によるエラーを防ぎます
+          IMAGE_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.SERVICE_NAME }}:${{ github.sha }}"
+          
           echo "Building image: ${IMAGE_TAG}"
           docker build -t "${IMAGE_TAG}" .
           docker push "${IMAGE_TAG}"
@@ -54,6 +56,7 @@ jobs:
         with:
           service: ${{ env.SERVICE_NAME }}
           region: ${{ env.REGION }}
+          # IMAGE_TAG 変数を使用せずに、環境変数から直接 URL を組み立てます
           image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
           env_vars: |
             GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
