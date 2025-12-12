@@ -11,7 +11,7 @@ Flask と WebSocket を使用して、低遅延でのAIとのストリーミン�
 
 ## 📖 特徴
 
-  * **リアルタイム音声対話**: WebSocket (`flask-sock`) と Gemini 2.0 Flash Exp モデルによる低遅延な音声対話。
+  * **リアルタイム音声対話*gitgit push origin mainock`) と Gemini 2.0 Flash Exp モデルによる低遅延な音声対話。
   * **ストリーミング応答**: Gemini API の `response_modalities=["AUDIO"]` を利用し、生成された音声を即座にクライアントへ送信。
   * **会話ログ保存**: 会話の内容と音声データを Google Cloud Storage に自動バックアップ。
   * **スケーラビリティ**: Google Cloud Run 上でのサーバーレス動作（コンテナベース）。
@@ -21,9 +21,9 @@ Flask と WebSocket を使用して、低遅延でのAIとのストリーミン�
 
 ```mermaid
 graph LR
-    Client[クライアントアプリ] -- WebSocket (Audio) --> CloudRun[Cloud Run (Flask)]
-    CloudRun -- 音声ストリーム --> Gemini[Google Gemini API]
-    CloudRun -- ログ/音声保存 --> GCS[Google Cloud Storage]
+    Client["クライアントアプリ"] -- "WebSocket (Audio)" --> CloudRun["Cloud Run (Flask)"]
+    CloudRun -- "音声ストリーム" --> Gemini["Google Gemini API"]
+    CloudRun -- "ログ/音声保存" --> GCS["Google Cloud Storage"]
 ```
 
 ## 📂 ディレクトリ構成
