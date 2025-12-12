@@ -22,6 +22,7 @@ Flask と WebSocket を使用して、低遅延でのAIとのストリーミン�
 ```mermaid
 graph LR
     Client["クライアントアプリ"] -- "WebSocket (Audio)" --> CloudRun["Cloud Run (Flask)"]
+    Client -- "POST /feedback (評価)" --> CloudRun
     CloudRun -- "音声ストリーム" --> Gemini["Google Gemini API"]
     CloudRun -- "ログ/音声保存" --> GCS["Google Cloud Storage"]
 ```
