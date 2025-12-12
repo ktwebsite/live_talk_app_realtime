@@ -12,6 +12,7 @@ import google.generativeai as genai
 from google.cloud import storage
 import datetime
 from dotenv import load_dotenv
+from prompts import get_system_instruction, get_feedback_prompt
 
 # 環境変数の読み込み
 load_dotenv()
@@ -55,21 +56,8 @@ def realtime_proxy(ws_client):
     host = "generativelanguage.googleapis.com"
     url = f"wss://{host}/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key={GEMINI_API_KEY}"
     
-    # システムプロンプト（日本語固定・顧客ロール）
-    system_prompt_text = """
-あなたは「株式会社テクノス」のIT導入担当者、佐藤（45歳）です。
-ユーザーは「AI Assistant Pro」というツールの営業担当者です。
-
-【あなたの設定】
-- 性格: 少し保守的だが、業務効率化には興味がある。
-- 現状: 会議の議事録作成やスケジュール調整に時間がかかって困っている。
-- 態度: 最初は少し忙しそうに振る舞うが、メリットを感じれば話を聞く。
-- 言語: 必ず「日本語」で話してください。英語は使わないでください。
-- 返答: 自然な会話になるように、1〜2文で短く即答してください。長考は禁止です。
-
-【会話のゴール】
-ユーザーがあなたの課題（議事録作成の手間など）を引き出し、アポイントメントを取れればユーザーの勝ちです。
-"""
+    # プロンプトをprompts.pyから取得
+    system_prompt_text = get_system_instruction()
 
     setup_msg = {
         "setup": {
@@ -171,26 +159,8 @@ def feedback():
         if os.path.exists(audio_path):
            uploaded_audio = genai.upload_file(audio_path, mime_type="audio/wav")
 
-        prompt = f"""
-        あなたは営業研修のコーチです。  
-        【資料1】ユーザー（営業担当）の発言ログ:
-        {conversation_log}
-        【資料2】AI顧客の発言音声:
-        (添付の音声ファイル)
-        【指示】
-        1. 音声を聞き取り文字起こししてください。
-        2. 会話全体の流れを再現してください。
-        3. 営業担当者のパフォーマンスを評価してください。
-        【出力フォーマット】
-        ## 会話の再現
-        - 営業: ...
-        - 顧客: ...
-
-        ## フィードバック
-        1. **良かった点**
-        2. **改善点**
-        3. **総合スコア** (/100)
-        """
+        # プロンプトをprompts.pyから取得
+        prompt = get_feedback_prompt(conversation_log)
 
         contents = [prompt]
         if uploaded_audio:
