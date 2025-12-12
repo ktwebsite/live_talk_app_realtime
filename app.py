@@ -9,6 +9,7 @@ from flask_cors import CORS
 import google.generativeai as genai
 from google.cloud import storage
 import datetime
+from prompts import get_system_instruction, get_feedback_prompt
 
 app = Flask(__name__)
 CORS(app)
@@ -33,7 +34,7 @@ def realtime_proxy(ws_client):
     setup_msg = {
         "setup": {
             "model": MODEL_NAME,
-            "system_instruction": { "parts": [{"text": "あなたはIT企業の導入担当者（顧客）です...（略）"}] },
+            "system_instruction": { "parts": [{"text": get_system_instruction()}] },
             "generation_config": {
                 "response_modalities": ["AUDIO"],
                 "speech_config": { "voice_config": {"prebuilt_voice_config": {"voice_name": "Aoede"}} }
@@ -122,30 +123,7 @@ def feedback():
         if os.path.exists(audio_path):
            uploaded_audio = genai.upload_file(audio_path, mime_type="audio/wav")
 
-        prompt = f"""
-        あなたは営業研修のコーチです。  
-        
-        【資料1】ユーザー（営業担当）の発言ログ:
-        {conversation_log}
-
-        【資料2】AI顧客の発言音声:
-        (添付の音声ファイル)
-
-        【指示】
-        1. まず、添付の音声ファイル（AI顧客の発言）を聞き取り、内容を文字起こししてください。
-        2. ユーザーの発言ログと合わせて、会話全体の流れを再現してください。
-        3. その会話全体に基づいて、営業担当者のパフォーマンスを評価してください。
-
-        【出力フォーマット】
-        ## 会話の再現（要約）
-        - 営業: ...
-        - 顧客: ...
-
-        ## フィードバック
-        1. **良かった点**
-        2. **改善点**
-        3. **総合スコア** (/100)
-        """
+        prompt = get_feedback_prompt(conversation_log)
 
         contents = [prompt]
         if uploaded_audio:
