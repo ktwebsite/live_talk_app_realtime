@@ -1,0 +1,60 @@
+# This file specifies files that are *not* uploaded to Google Cloud
+# using gcloud. It follows the same syntax as .gitignore
+
+.gcloudignore
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 環境変数・認証情報（重要！）
+.env
+.env.local
+.env.*.local
+service_account.json
+*.json  # 必要なJSONファイルがある場合は個別に除外を解除
+
+# ログファイル
+logs/
+*.log
+
+# ドキュメント
+README.md
+docs/
+*.md
+CHANGELOG.md
+LICENSE
+
+# 開発環境
+.vscode/
+.idea/
+*.code-workspace
+
+# テストファイル
+tests/
+test_*.py
+*_test.py
+
+# Git管理
+.git/
+.github/
+
+# その他
+.DS_Store
+Thumbs.db
+*.swp
+*.bak
+*~

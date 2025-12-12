@@ -3,13 +3,17 @@ name: Deploy to Cloud Run
 on:
   push:
     branches:
-      - main # mainブランチへのプッシュで発動
+      - main
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
+  workflow_dispatch: # 手動トリガーも可能にする
 
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  REGION: asia-northeast1 # 東京リージョン
-  REPO_NAME: live-talk # 💡 修正済み: Artifact Registry の実際の名前に合わせました
-  SERVICE_NAME: live-talk # 💡 修正済み: サービス名もリポジトリ名に合わせることで統一性を高めます
+  REGION: asia-northeast1
+  REPO_NAME: live-talk
+  SERVICE_NAME: live-talk
 
 jobs:
   deploy:
@@ -45,7 +49,7 @@ jobs:
         run: |
           # IMAGE_TAG を Run ブロック内で定義し、改行によるエラーを防ぎます
           IMAGE_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.SERVICE_NAME }}:${{ github.sha }}"
-          
+
           echo "Building image: ${IMAGE_TAG}"
           docker build -t "${IMAGE_TAG}" .
           docker push "${IMAGE_TAG}"

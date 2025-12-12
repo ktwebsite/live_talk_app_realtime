@@ -251,7 +251,8 @@
     async function startMicrophone() {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, sampleRate: 24000 } });
         inputSource = audioContext.createMediaStreamSource(stream);
-        processor = audioContext.createScriptProcessor(4096, 1, 1);
+        // バッファサイズを 4096 -> 1024 に変更して遅延を短縮 (約170ms -> 42ms)
+        processor = audioContext.createScriptProcessor(1024, 1, 1);
         inputSource.connect(processor);
         processor.connect(audioContext.destination);
 

@@ -1,18 +1,35 @@
+# --- 機密情報 (絶対に公開しない) ---
 .env
 service_account.json
-Zone.Identifier
 
-# ログファイル
-logs/
-*.log
+# --- OS・システムのメタデータ ---
+# Windowsの「Webからダウンロード」識別子 (ワイルドカード必須)
+*:Zone.Identifier
+# Windowsのサムネイル
+Thumbs.db
+# Macのフォルダ設定ファイル
+.DS_Store
 
-# Python
+# --- Python ---
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 .Python
+# 仮想環境 (一般的な名前を網羅)
+env/
+venv/
+.env/
+.venv/
 
-# VS Code
+# --- ログ ---
+logs/
+*.log
+
+# --- VS Code ---
 .vscode/
 *.code-workspace
+
+# --- テスト・キャッシュ  ---
+.pytest_cache/
+.mypy_cache/
