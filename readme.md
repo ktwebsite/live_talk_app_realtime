@@ -1,5 +1,3 @@
-
-
 このファイルをプロジェクトのルートディレクトリに保存してください。GitHubリポジトリのトップページとして機能します。
 
 -----
@@ -14,6 +12,7 @@ Flask と WebSocket を使用して、低遅延でのAIとのストリーミン�
   * **リアルタイム音声対話*gitgit push origin mainock`) と Gemini 2.0 Flash Exp モデルによる低遅延な音声対話。
   * **ストリーミング応答**: Gemini API の `response_modalities=["AUDIO"]` を利用し、生成された音声を即座にクライアントへ送信。
   * **会話ログ保存**: 会話の内容と音声データを Google Cloud Storage に自動バックアップ。
+  * **自動評価機能**: 会話終了後、Gemini 1.5 Flash (マルチモーダル) が音声とログを分析し、フィードバックを生成。
   * **スケーラビリティ**: Google Cloud Run 上でのサーバーレス動作（コンテナベース）。
   * **Docker対応**: 軽量な `python:3.10-slim` ベースのコンテナイメージ。
 
@@ -23,7 +22,8 @@ Flask と WebSocket を使用して、低遅延でのAIとのストリーミン�
 graph LR
     Client["クライアントアプリ"] -- "WebSocket (Audio)" --> CloudRun["Cloud Run (Flask)"]
     Client -- "POST /feedback (評価)" --> CloudRun
-    CloudRun -- "音声ストリーム" --> Gemini["Google Gemini API"]
+    CloudRun -- "音声ストリーム" --> Gemini["Gemini 2.0 Flash Exp (対話)"]
+    CloudRun -- "ログ/音声分析" --> GeminiEval["Gemini 1.5 Flash (評価)"]
     CloudRun -- "ログ/音声保存" --> GCS["Google Cloud Storage"]
 ```
 
@@ -124,7 +124,7 @@ python app.py
   * **Parameters:**
     * `log`: 会話ログ (JSON文字列)
     * `audio`: 音声ファイル (Blob/File)
-  * **Description:** 会話終了後にログと音声を GCS にアップロードします。
+  * **Description:** 会話終了後にログと音声を GCS にアップロードし、Gemini 1.5 Flash を使用してパフォーマンス評価を行います。
 
 
 #### 通信フォーマット
