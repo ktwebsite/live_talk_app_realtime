@@ -1,3 +1,18 @@
 .env
 service_account.json
 Zone.Identifier
+
+# ログファイル
+logs/
+*.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# VS Code
+.vscode/
+*.code-workspace
